@@ -47,11 +47,15 @@ type result struct {
 	contentLength int64
 }
 
+// Work contains the configuration of the worker
 type Work struct {
 	// Request is the request to be made.
 	Request *http.Request
 
 	RequestBody []byte
+
+	// Hosts contains all the hosts headers to be inserted in the request
+	Hosts []string
 
 	// N is the total number of requests to make.
 	N int
@@ -140,7 +144,7 @@ func (b *Work) Finish() {
 	b.report.finalize(total)
 }
 
-func (b *Work) makeRequest(c *http.Client) {
+func (b *Work) makeRequest(c *http.Client, host string) {
 	s := now()
 	var size int64
 	var code int
@@ -173,6 +177,7 @@ func (b *Work) makeRequest(c *http.Client) {
 		},
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+	req.Host = host
 	resp, err := c.Do(req)
 	if err == nil {
 		size = resp.ContentLength
@@ -217,7 +222,7 @@ func (b *Work) runWorker(client *http.Client, n int) {
 			if b.QPS > 0 {
 				<-throttle
 			}
-			b.makeRequest(client)
+			b.makeRequest(client, b.Hosts[i%len(b.Hosts)])
 		}
 	}
 }
@@ -227,10 +232,6 @@ func (b *Work) runWorkers() {
 	wg.Add(b.C)
 
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-			ServerName:         b.Request.Host,
-		},
 		MaxIdleConnsPerHost: min(b.C, maxIdleConn),
 		DisableCompression:  b.DisableCompression,
 		DisableKeepAlives:   b.DisableKeepAlives,

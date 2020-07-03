@@ -16,9 +16,11 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"net/http"
 	gourl "net/url"
@@ -91,7 +93,7 @@ Options:
   -x  HTTP Proxy address as host:port.
   -h2 Enable HTTP/2.
 
-  -host	HTTP Host header.
+  -host	HTTP Host headers file.
 
   -disable-compression  Disable compression.
   -disable-keepalive    Disable keep-alive, prevents re-use of TCP
@@ -199,8 +201,22 @@ func main() {
 	}
 
 	// set host header if set
+
+	var hosts []string
+
 	if *hostHeader != "" {
-		req.Host = *hostHeader
+		file, err := os.Open(*hostHeader)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+
+		for scanner.Scan() {
+			text := scanner.Text()
+			hosts = append(hosts, text)
+		}
 	}
 
 	ua := req.UserAgent()
@@ -215,6 +231,7 @@ func main() {
 	w := &requester.Work{
 		Request:            req,
 		RequestBody:        bodyAll,
+		Hosts:              hosts,
 		N:                  num,
 		C:                  conc,
 		QPS:                q,
